@@ -3,6 +3,8 @@
 
 const char* host = "api.open-meteo.com";  // Updated host to match your URL structure
 const int httpPort = 80;
+const char* ssid = "VI4";
+const char* password = "vi421241";
 
 // Function to create the URL with custom latitude and longitude
 String createURL(double latitude, double longitude) {
@@ -21,15 +23,18 @@ String createURL(double latitude, double longitude) {
 
 void setup() {
     Serial.begin(115200);
-    Serial.println("Connecting to WiFi");
-    WiFi.begin("Wokwi-GUEST", "", 6);
-    
-    while (WiFi.status() != WL_CONNECTED) {
-        delay(100);
-        Serial.println("...");
+
+    WiFi.begin(ssid, password);
+    Serial.println("Connecting");
+    while(WiFi.status() != WL_CONNECTED) {
+      delay(500);
+      Serial.print(".");
     }
+    Serial.println("");
+    Serial.print("Connected to WiFi network with IP Address: ");
+    Serial.println(WiFi.localIP());
     
-    Serial.println("Connected to WiFi");
+    Serial.println("Timer set to 10 seconds (timerDelay variable), it will take 10 seconds before publishing the first reading.");
 }
 
 void loop() {
