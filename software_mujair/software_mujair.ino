@@ -4,48 +4,69 @@
 const char* host = "api.open-meteo.com";  // Updated host to match your URL structure
 const int httpPort = 80;
 
-// Function to create the URL with custom latitude and longitude
-String createURL(double latitude, double longitude) {
+#define WIFI_SSID "Wokwi-GUEST"
+#define WIFI_PASSWORD ""
+
+String createURL(String latitude, String longitude, String timezone) {
     // Base URL template
-    const char* baseURL = "/v1/forecast?latitude=%.4f&longitude=%.4f&hourly=temperature_2m,precipitation,rain,showers&timezone=Asia%%2FBangkok";
+    const char* baseURL = "/v1/forecast?latitude=%LAT%&longitude=%LONG%&hourly=temperature_2m,precipitation,rain,showers&timezone=%TIMEZONE%";
 
-    // Create a String object to store the URL
+    // Format the URL with custom latitude, longitude, and timezone
     String url = String(baseURL);
-
-    // Format the URL with custom latitude and longitude
-    url.replace("%.4f", String(latitude));
-    url.replace("%.4f", String(longitude));
+    url.replace("%LAT%", latitude);
+    url.replace("%LONG%", longitude);
+    url.replace("%TIMEZONE%", timezone);
 
     return url;
 }
 
+
 void setup() {
     Serial.begin(115200);
     Serial.println("Connecting to WiFi");
-    WiFi.begin("Wokwi-GUEST", "", 6);
-    
+    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+    Serial.print("Connecting to WiFi ");
+    Serial.print(WIFI_SSID);
+    // Wait for connection
     while (WiFi.status() != WL_CONNECTED) {
-        delay(100);
-        Serial.println("...");
+      delay(100);
+      Serial.print(".");
     }
-    
-    Serial.println("Connected to WiFi");
+    Serial.println(" Connected!");
+
+    Serial.print("IP address: ");
+    Serial.println(WiFi.localIP());
 }
 
 void loop() {
     double customLatitude, customLongitude;
+    String timezone = "Asia/Bangkok";
     
-    Serial.println("Enter Latitude:");
-    while (!Serial.available()) {}
-    customLatitude = Serial.parseFloat();
-    Serial.println(customLatitude);
+    Serial.println("Enter Latitude (-180.000000 to 180.000000):");
+    while (!Serial.available()) {}  // Wait for user input
+    String latitudeInput = Serial.readStringUntil('\n');  // Read input as a string
+    customLatitude = latitudeInput.toDouble();
+    Serial.println(latitudeInput);
     
-    Serial.println("Enter Longitude:");
-    while (!Serial.available()) {}
-    customLongitude = Serial.parseFloat();
-    Serial.println(customLongitude);
+    // Validate latitude input
+    if (customLatitude < -90.0 || customLatitude > 90.0) {
+        Serial.println("Invalid latitude. Please enter a value between -90.000000 and 90.000000.");
+        return;  // Exit the loop if the latitude is out of range
+    }
 
-    String url = createURL(customLatitude, customLongitude);
+    Serial.println("Enter Longitude (-180.000000 to 180.000000):");
+    while (!Serial.available()) {}  // Wait for user input
+    String longitudeInput = Serial.readStringUntil('\n');  // Read input as a string
+    customLongitude = longitudeInput.toDouble();
+    Serial.println(longitudeInput);
+
+    // Validate longitude input
+    if (customLongitude < -180.0 || customLongitude > 180.0) {
+        Serial.println("Invalid longitude. Please enter a value between -180.000000 and 180.000000.");
+        return;  // Exit the loop if the longitude is out of range
+    }
+
+    String url = createURL(latitudeInput, longitudeInput, timezone);
 
     WiFiClient client;
 
