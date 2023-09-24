@@ -4,8 +4,8 @@
 const char* host = "api.open-meteo.com";  // Updated host to match your URL structure
 const int httpPort = 80;
 
-#define WIFI_SSID "Wokwi-GUEST"
-#define WIFI_PASSWORD ""
+#define WIFI_SSID "VI4"
+#define WIFI_PASSWORD "vi421241"
 
 String createURL(String latitude, String longitude, String timezone) {
     // Base URL template
@@ -69,6 +69,7 @@ void loop() {
     String url = createURL(latitudeInput, longitudeInput, timezone);
 
     WiFiClient client;
+    DynamicJsonDocument doc(512);
 
     Serial.println("Connecting to ");
     Serial.println(host);
@@ -95,8 +96,12 @@ void loop() {
     }
 
     while (client.available()) {
-        String line = client.readStringUntil('\r');
-        Serial.println(line);
+        String line = client.readStringUntil('\n');
+        //Serial.println(line);
+        deserializeJson(doc, line);
+        JsonObject obj = doc.as<JsonObject>();
+        String latitude = obj[String("generationtime_ms")];
+        Serial.println(latitude);
     }
 
     Serial.println("Closing Connection");
