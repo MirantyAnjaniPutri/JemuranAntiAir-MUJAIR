@@ -1,0 +1,394 @@
+#include <ArduinoJson.h>
+#include <WiFi.h>
+
+const char* host = "api.open-meteo.com";  // Updated host to match your URL structure
+const int httpPort = 80;
+
+#define WIFI_SSID "LAPTOP-ELGTLQVF 9258"
+#define WIFI_PASSWORD "Miranty27"
+
+String createURL(String latitude, String longitude, String timezone) {
+    // Base URL template
+    const char* baseURL = "/v1/forecast?latitude=%LAT%&longitude=%LONG%&hourly=temperature_2m,precipitation,rain,showers&timezone=%TIMEZONE%";
+
+    // Format the URL with custom latitude, longitude, and timezone
+    String url = String(baseURL);
+    url.replace("%LAT%", latitude);
+    url.replace("%LONG%", longitude);
+    url.replace("%TIMEZONE%", timezone);
+
+    return url;
+}
+
+
+void setup() {
+    Serial.begin(115200);
+    Serial.println("Connecting to WiFi");
+    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+    Serial.print("Connecting to WiFi ");
+    Serial.print(WIFI_SSID);
+    // Wait for connection
+    while (WiFi.status() != WL_CONNECTED) {
+      delay(100);
+      Serial.print(".");
+    }
+    Serial.println(" Connected!");
+
+    Serial.print("IP address: ");
+    Serial.println(WiFi.localIP());
+}
+
+void loop() {
+    double customLatitude, customLongitude;
+    String timezone = "Asia/Bangkok";
+    
+    Serial.println("Enter Latitude (-180.000000 to 180.000000):");
+    while (!Serial.available()) {}  // Wait for user input
+    String latitudeInput = Serial.readStringUntil('\n');  // Read input as a string
+    customLatitude = latitudeInput.toDouble();
+    Serial.println(latitudeInput);
+    
+    // Validate latitude input
+    if (customLatitude < -90.0 || customLatitude > 90.0) {
+        Serial.println("Invalid latitude. Please enter a value between -90.000000 and 90.000000.");
+        return;  // Exit the loop if the latitude is out of range
+    }
+
+    Serial.println("Enter Longitude (-180.000000 to 180.000000):");
+    while (!Serial.available()) {}  // Wait for user input
+    String longitudeInput = Serial.readStringUntil('\n');  // Read input as a string
+    customLongitude = longitudeInput.toDouble();
+    Serial.println(longitudeInput);
+
+    // Validate longitude input
+    if (customLongitude < -180.0 || customLongitude > 180.0) {
+        Serial.println("Invalid longitude. Please enter a value between -180.000000 and 180.000000.");
+        return;  // Exit the loop if the longitude is out of range
+    }
+
+    String url = createURL(latitudeInput, longitudeInput, timezone);
+
+    WiFiClient client;
+    DynamicJsonDocument doc(512);
+
+    Serial.println("Connecting to ");
+    Serial.println(host);
+
+    if (!client.connect(host, httpPort)) {
+        Serial.println("Connection Failed");
+        return;
+    } else {
+        Serial.println("Connection Established Successfully");
+    }
+
+    Serial.println("Connecting to URL:");
+    Serial.println(url);
+
+    client.print(String("GET ") + url + " HTTP/1.1\r\n" + "Host: " + host + "\r\n" + "Connection: close\r\n\r\n");
+
+    unsigned long timeout = millis();
+    while (client.available() == 0) {
+        if (millis() - timeout > 5000) {
+            Serial.println("Connection Timeout");
+            client.stop();
+            return;
+        }
+    }
+
+    while (client.available()) {
+        String line = client.readStringUntil('\n');
+        //Serial.println(line);
+        deserializeJson(doc, line);
+        JsonObject obj = doc.as<JsonObject>();
+        String latitude = obj[String("generationtime_ms")];
+        Serial.println(latitude);
+    }
+
+    Serial.println("Closing Connection");
+    client.stop();
+}
+
+
+
+
+#include <ArduinoJson.h>
+#include <WiFi.h>
+
+const char* host = "api.open-meteo.com";  // Updated host to match your URL structure
+const int httpPort = 80;
+
+// Define arrays to store data globally
+const int maxDataSize = 100; // Adjust this based on your expected maximum data size
+
+String timeArray[maxDataSize];
+float temperatureArray[maxDataSize];
+float precipitationArray[maxDataSize];
+float precipitationProbabilityArray[maxDataSize];
+float rainArray[maxDataSize];
+float showersArray[maxDataSize];
+
+// Define the size of the JSON buffer according to your JSON response size
+const size_t bufferSize = 2048; // Adjust the size as needed
+StaticJsonDocument<bufferSize> jsonDoc;
+
+#define WIFI_SSID "Wokwi-GUEST"
+#define WIFI_PASSWORD ""
+
+String createURL(String latitude, String longitude, String timezone) {
+    // Base URL template
+    const char* baseURL = "/v1/forecast?latitude=%LAT%&longitude=%LONG%&hourly=temperature_2m,precipitation_probability,precipitation,rain,showers&timezone=%TIMEZONE%";
+
+    // Format the URL with custom latitude, longitude, and timezone
+    String url = String(baseURL);
+    url.replace("%LAT%", latitude);
+    url.replace("%LONG%", longitude);
+    url.replace("%TIMEZONE%", timezone);
+
+    return url;
+}
+
+bool parseChunkedJson(Stream& stream, bool& secondTimeFound, std::vector<String>& timeArray) {
+  while (true) {
+    String line = stream.readStringUntil('\n');
+    if (line.startsWith("0")) {
+      // End of chunked data
+      return true;
+    }
+    int chunkSize = line.toInt(16);
+    if (chunkSize > 0) {
+      String chunkData = stream.readStringUntil('\n');
+      jsonDoc.clear();
+      DeserializationError error = deserializeJson(jsonDoc, chunkData);
+      if (error) {
+        Serial.print("JSON Parsing Error: ");
+        Serial.println(error.c_str());
+        return false;
+      }
+      
+      // Process the JSON data in jsonDoc
+      if (jsonDoc.containsKey("time")) {
+        if (secondTimeFound) {
+          // We've found the second "time" field, start populating timeArray
+          JsonArray timeJsonArray = jsonDoc["time"];
+          for (const auto& value : timeJsonArray) {
+            timeArray.push_back(value.as<String>());
+          }
+        } else {
+          // Check if this is the second "time" field
+          secondTimeFound = true;
+        }
+      }
+    }
+  }
+}
+
+/*void parseJsonResponse(String jsonResponse) {
+    // Initialize variables to keep track of the keyword positions
+    int timePos = -1;
+    int temperaturePos = -1;
+    int precipitationPos = -1;
+    int rainPos = -1;
+    int showersPos = -1;
+
+    // Find the second occurrences of keywords
+    for (int i = 0; i < 2; i++) {
+        timePos = jsonResponse.indexOf("\"time\":[", timePos + 1);
+        temperaturePos = jsonResponse.indexOf("\"temperature_2m\":[", temperaturePos + 1);
+        precipitationPos = jsonResponse.indexOf("\"precipitation\":[", precipitationPos + 1);
+        rainPos = jsonResponse.indexOf("\"rain\":[", rainPos + 1);
+        showersPos = jsonResponse.indexOf("\"showers\":[", showersPos + 1);
+    }
+
+    // Check if any keyword positions were not found
+    if (timePos == -1 || temperaturePos == -1 || precipitationPos == -1 || rainPos == -1 || showersPos == -1) {
+        Serial.println("One or more keyword positions not found.");
+        return;
+    }
+
+    // Extract and print the data
+    Serial.print("Time: ");
+    int timeEnd = jsonResponse.indexOf("]", timePos);
+    String timeData = jsonResponse.substring(timePos, timeEnd + 1);
+    Serial.println(timeData);
+
+    Serial.print("Temperature: ");
+    int temperatureEnd = jsonResponse.indexOf("]", temperaturePos);
+    String temperatureData = jsonResponse.substring(temperaturePos, temperatureEnd + 1);
+    Serial.println(temperatureData);
+
+    Serial.print("Precipitation: ");
+    int precipitationEnd = jsonResponse.indexOf("]", precipitationPos);
+    String precipitationData = jsonResponse.substring(precipitationPos, precipitationEnd + 1);
+    Serial.println(precipitationData);
+
+    Serial.print("Rain: ");
+    int rainEnd = jsonResponse.indexOf("]", rainPos);
+    String rainData = jsonResponse.substring(rainPos, rainEnd + 1);
+    Serial.println(rainData);
+
+    Serial.print("Showers: ");
+    int showersEnd = jsonResponse.indexOf("]", showersPos);
+    String showersData = jsonResponse.substring(showersPos, showersEnd + 1);
+    Serial.println(showersData);
+}*/
+
+/*void parseJsonResponse(const String &jsonResponse) {
+  // Deserialize the JSON response
+  DeserializationError error = deserializeJson(jsonDoc, jsonResponse);
+
+  if (error) {
+    Serial.print("JSON Parsing Error: ");
+    Serial.println(error.c_str());
+    return;
+  }
+
+  // Find the positions of the second occurrences of keywords
+  const char* timeArray = jsonDoc["hourly"]["time"][1];
+  const char* temperatureArray = jsonDoc["hourly"]["temperature_2m"][1];
+  const char* precipitationArray = jsonDoc["hourly"]["precipitation"][1];
+  const char* rainArray = jsonDoc["hourly"]["rain"][1];
+  const char* showersArray = jsonDoc["hourly"]["showers"][1];
+
+  // Now you can work with the arrays for the second occurrence
+  // For example, to get the second time value:
+  const char* secondTime = timeArray;
+  Serial.println(secondTime);
+}*/
+
+void printData() {
+    // Print data from global arrays
+    for (int i = 0; i < maxDataSize; i++) {
+        if (timeArray[i] == nullptr) {
+            break; // Stop if we reach the end of the data
+        }
+        Serial.print("Time: ");
+        Serial.println(timeArray[i]);
+        Serial.print("Temperature: ");
+        Serial.println(temperatureArray[i]);
+        Serial.print("Precipitation: ");
+        Serial.println(precipitationArray[i]);
+        Serial.print("Rain: ");
+        Serial.println(rainArray[i]);
+        Serial.print("Showers: ");
+        Serial.println(showersArray[i]);
+        Serial.println(); // Separate data entries
+    }
+}
+
+void setup() {
+    Serial.begin(115200);
+    Serial.println("Connecting to WiFi");
+    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+    Serial.print("Connecting to WiFi ");
+    Serial.print(WIFI_SSID);
+
+    // Wait for connection
+    while (WiFi.status() != WL_CONNECTED) {
+        delay(100);
+        Serial.print(".");
+    }
+    Serial.println(" Connected!");
+
+    Serial.print("IP address: ");
+    Serial.println(WiFi.localIP());
+}
+
+void loop() {
+    double customLatitude, customLongitude;
+    String timezone = "Asia/Bangkok";
+    
+    Serial.println("Enter Latitude (-180.000000 to 180.000000):");
+    while (!Serial.available()) {}  // Wait for user input
+    String latitudeInput = Serial.readStringUntil('\n');  // Read input as a string
+    customLatitude = latitudeInput.toDouble();
+    Serial.println(latitudeInput);
+    
+    // Validate latitude input
+    if (customLatitude < -90.0 || customLatitude > 90.0) {
+        Serial.println("Invalid latitude. Please enter a value between -90.000000 and 90.000000.");
+        return;  // Exit the loop if the latitude is out of range
+    }
+
+    Serial.println("Enter Longitude (-180.000000 to 180.000000):");
+    while (!Serial.available()) {}  // Wait for user input
+    String longitudeInput = Serial.readStringUntil('\n');  // Read input as a string
+    customLongitude = longitudeInput.toDouble();
+    Serial.println(longitudeInput);
+
+    // Validate longitude input
+    if (customLongitude < -180.0 || customLongitude > 180.0) {
+        Serial.println("Invalid longitude. Please enter a value between -180.000000 and 180.000000.");
+        return;  // Exit the loop if the longitude is out of range
+    }
+
+    String url = createURL(latitudeInput, longitudeInput, timezone);
+
+    WiFiClient client;
+    DynamicJsonDocument doc(2048); // Increase the size as needed
+
+    Serial.println("Connecting to ");
+    Serial.println(host);
+
+    if (!client.connect(host, httpPort)) {
+        Serial.println("Connection Failed");
+        return;
+    } else {
+        Serial.println("Connection Established Successfully");
+    }
+
+    Serial.println("Connecting to URL:");
+    Serial.println(url);
+
+    client.print(String("GET ") + url + " HTTP/1.1\r\n" + "Host: " + host + "\r\n" + "Connection: close\r\n\r\n");
+
+    unsigned long timeout = millis();
+    while (client.available() == 0) {
+        if (millis() - timeout > 5000) {
+            Serial.println("Connection Timeout");
+            client.stop();
+            return;
+        }
+    }
+
+    // Parse JSON
+    DeserializationError error = deserializeJson(doc, client);
+    
+    if (error) {
+        Serial.print("JSON Parsing Error: ");
+        Serial.println(error.c_str());
+
+        // Print the raw JSON response for debugging
+        Serial.println("Raw JSON response:");
+        String jsonResponse = "";
+
+        while (client.available()) {
+            char c = client.read();
+            jsonResponse += c;
+        }
+
+        Serial.println(jsonResponse);
+        // Now, parse the JSON response and store the data in global arrays
+        bool secondTimeFound = false;
+        std::vector<String> timeArray;
+
+        // Simulate receiving JSON response (replace this with your actual data source)
+        String jsonResponse = "{ your JSON response here }";
+
+        // Process the chunked JSON response
+        if (parseChunkedJson(jsonResponse, secondTimeFound, timeArray)) {
+          Serial.println("JSON parsing successful.");
+          if (timeArray.size() > 0) {
+            Serial.println("Second timeArray values:");
+            for (const String& timeValue : timeArray) {
+              Serial.println(timeValue);
+            }
+          }
+        } else {
+          Serial.println("JSON parsing failed.");
+        }
+
+    Serial.println("Closing Connection");
+    client.stop();
+
+    printData();
+}
