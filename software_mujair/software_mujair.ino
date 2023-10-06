@@ -1,12 +1,20 @@
 #include <Arduino.h>
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
+#include <WiFi.h>
+#include <Wire.h>
+#include <TinyGPSPlus.h>
 
-const char* ssid = "Wokwi-GUEST";
-const char* password = "";
+const char* ssid = "v";
+const char* password = "vivita21";
 const char* apiKey = "ca7c56cd09d32f53c7b5840220207650";
-const float latitude = -6.200000;
-const float longitude = 106.816666;
+double latitude;
+double longitude;
+
+#define RXD2 16
+#define TXD2 17
+HardwareSerial neogps(1);
+TinyGPSPlus gps;
 
 struct WeatherData {
   String weatherMain;
@@ -27,6 +35,72 @@ void setup() {
   }
 
   Serial.println("Connected to WiFi");
+
+  Serial.print("IP address: ");
+  Serial.println(WiFi.localIP());
+
+  //Begin serial communication Neo6mGPS
+  neogps.begin(9600, SERIAL_8N1, RXD2, TXD2);
+
+  delay(2000);
+}
+
+void loop() {
+  // Your code here
+  boolean newData = false;
+  while(gps.location.lat() == 0 && gps.location.lng() == 0){
+    for (unsigned long start = millis(); millis() - start < 1000;)
+    {
+      while (neogps.available())
+      {
+        if (gps.encode(neogps.read()))
+        {
+          newData = true;
+        }
+      }
+    }
+
+    //If newData is true
+    if(newData == true)
+    {
+      newData = false;
+      latitude = gps.location.lat();
+      longitude = gps.location.lng();
+    }
+    else
+    {
+      Serial.println("No Data");
+    }
+    Serial.println("Satelitte: " + String(gps.satellites.value()));
+    Serial.println(gps.location.isValid());
+    Serial.println(String(latitude) + " and " + String(longitude));
+  }
+
+  if(latitude == 0 && longitude == 0){
+    Serial.println("Enter Latitude (-180.000000 to 180.000000):");
+    while (!Serial.available()) {}  // Wait for user input
+    String latitudeInput = Serial.readStringUntil('\n');  // Read input as a string
+    latitude = latitudeInput.toDouble();
+    Serial.println(latitudeInput);
+    
+    // Validate latitude input
+    if (latitude < -90.0 || latitude > 90.0) {
+        Serial.println("Invalid latitude. Please enter a value between -90.000000 and 90.000000.");
+        return;  // Exit the loop if the latitude is out of range
+    }
+
+    Serial.println("Enter Longitude (-180.000000 to 180.000000):");
+    while (!Serial.available()) {}  // Wait for user input
+    String longitudeInput = Serial.readStringUntil('\n');  // Read input as a string
+    longitude = longitudeInput.toDouble();
+    Serial.println(longitudeInput);
+
+    // Validate longitude input
+    if (longitude < -180.0 || longitude > 180.0) {
+        Serial.println("Invalid longitude. Please enter a value between -180.000000 and 180.000000.");
+        return;  // Exit the loop if the longitude is out of range
+    }
+  }
 
   HTTPClient http;
   String apiUrl = "http://api.openweathermap.org/data/2.5/weather?lat=" + String(latitude) + "&lon=" + String(longitude) + "&appid=" + apiKey;
@@ -78,8 +152,4 @@ void setup() {
   }
 
   http.end();
-}
-
-void loop() {
-  // Your code here
 }
