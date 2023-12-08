@@ -97,7 +97,7 @@ void loop() {
 
     // Move the motor to position 800
     enableOutput();
-    motor.moveTo(800);
+    motor.moveTo(-800);
     while (motor.distanceToGo() != 0) {
       motor.run();
     }
