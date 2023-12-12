@@ -1,7 +1,23 @@
 /*
-  Based on Neil Kolban example for IDF: https://github.com/nkolban/esp32-snippets/blob/master/cpp_utils/tests/BLE%20Tests/SampleNotify.cpp
-  Ported to Arduino ESP32 by Evandro Copercini
-  updated by chegewara and MoThunderz
+    Video: https://www.youtube.com/watch?v=oCMOYS71NIU
+    Based on Neil Kolban example for IDF: https://github.com/nkolban/esp32-snippets/blob/master/cpp_utils/tests/BLE%20Tests/SampleNotify.cpp
+    Ported to Arduino ESP32 by Evandro Copercini
+    updated by chegewara
+
+   Create a BLE server that, once we receive a connection, will send periodic notifications.
+   The service advertises itself as: 4fafc201-1fb5-459e-8fcc-c5c9c331914b
+   And has a characteristic of: beb5483e-36e1-4688-b7f5-ea07361b26a8
+
+   The design of creating the BLE server is:
+   1. Create a BLE Server
+   2. Create a BLE Service
+   3. Create a BLE Characteristic on the Service
+   4. Create a BLE Descriptor on the characteristic
+   5. Start the service.
+   6. Start advertising.
+
+   A connect hander associated with the server starts a background task that performs notification
+   every couple of seconds.
 */
 #include <BLEDevice.h>
 #include <BLEServer.h>
@@ -9,9 +25,11 @@
 #include <BLE2902.h>
 
 BLEServer* pServer = NULL;
-BLECharacteristic* pCharacteristic = NULL;
-BLEDescriptor *pDescr;
-BLE2902 *pBLE2902;
+BLECharacteristic* pCharacteristic_1 = NULL;
+BLECharacteristic* pCharacteristic_2 = NULL;
+BLEDescriptor *pDescr_1;
+BLE2902 *pBLE2902_1;
+BLE2902 *pBLE2902_2;
 
 bool deviceConnected = false;
 bool oldDeviceConnected = false;
@@ -21,7 +39,9 @@ uint32_t value = 0;
 // https://www.uuidgenerator.net/
 
 #define SERVICE_UUID        "4fafc201-1fb5-459e-8fcc-c5c9c331914b"
-#define CHARACTERISTIC_UUID "beb5483e-36e1-4688-b7f5-ea07361b26a8"
+#define CHARACTERISTIC_UUID_1 "beb5483e-36e1-4688-b7f5-ea07361b26a8"
+#define CHARACTERISTIC_UUID_2 "1c95d5e3-d8f7-413a-bf3d-7a2e5d7be87e"
+
 
 class MyServerCallbacks: public BLEServerCallbacks {
     void onConnect(BLEServer* pServer) {
@@ -32,6 +52,8 @@ class MyServerCallbacks: public BLEServerCallbacks {
       deviceConnected = false;
     }
 };
+
+
 
 void setup() {
   Serial.begin(115200);
@@ -47,23 +69,28 @@ void setup() {
   BLEService *pService = pServer->createService(SERVICE_UUID);
 
   // Create a BLE Characteristic
-  pCharacteristic = pService->createCharacteristic(
-                      CHARACTERISTIC_UUID,
-                      BLECharacteristic::PROPERTY_READ   |
-                      BLECharacteristic::PROPERTY_WRITE  |
-                      BLECharacteristic::PROPERTY_NOTIFY |
-                      BLECharacteristic::PROPERTY_INDICATE
-                    );                   
+  pCharacteristic_1 = pService->createCharacteristic(
+                      CHARACTERISTIC_UUID_1,
+                      BLECharacteristic::PROPERTY_NOTIFY
+                    );
+  pCharacteristic_2 = pService->createCharacteristic(
+                      CHARACTERISTIC_UUID_2,
+                      BLECharacteristic::PROPERTY_NOTIFY
+                    );
 
+  // https://www.bluetooth.com/specifications/gatt/viewer?attributeXmlFile=org.bluetooth.descriptor.gatt.client_characteristic_configuration.xml
   // Create a BLE Descriptor
-  
-  pDescr = new BLEDescriptor((uint16_t)0x2901);
-  pDescr->setValue("A very interesting variable");
-  pCharacteristic->addDescriptor(pDescr);
-  
-  pBLE2902 = new BLE2902();
-  pBLE2902->setNotifications(true);
-  pCharacteristic->addDescriptor(pBLE2902);
+  pDescr_1 = new BLEDescriptor((uint16_t)0x2901);
+  pDescr_1->setValue("A very interesting variable");
+  pCharacteristic_1->addDescriptor(pDescr_1);
+
+  pBLE2902_1 = new BLE2902();
+  pBLE2902_1->setNotifications(true);  
+  pCharacteristic_1->addDescriptor(pBLE2902_1);
+
+  pBLE2902_2 = new BLE2902();
+  pBLE2902_2->setNotifications(true);  
+  pCharacteristic_2->addDescriptor(pBLE2902_2);
 
   // Start the service
   pService->start();
@@ -80,10 +107,12 @@ void setup() {
 void loop() {
     // notify changed value
     if (deviceConnected) {
-        pCharacteristic->setValue(value);
-        pCharacteristic->notify();
+        pCharacteristic_1->setValue(value);
+        pCharacteristic_1->notify();
         value++;
-        delay(1000);
+        pCharacteristic_2->setValue("This is a string");
+        pCharacteristic_2->notify();
+        delay(1000); // bluetooth stack will go into congestion, if too many packets are sent, in 6 hours test i was able to go as low as 3ms
     }
     // disconnecting
     if (!deviceConnected && oldDeviceConnected) {
