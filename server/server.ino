@@ -1,48 +1,36 @@
 /*
-    Video: https://www.youtube.com/watch?v=oCMOYS71NIU
-    Based on Neil Kolban example for IDF: https://github.com/nkolban/esp32-snippets/blob/master/cpp_utils/tests/BLE%20Tests/SampleNotify.cpp
-    Ported to Arduino ESP32 by Evandro Copercini
-    updated by chegewara
-
-   Create a BLE server that, once we receive a connection, will send periodic notifications.
-   The service advertises itself as: 4fafc201-1fb5-459e-8fcc-c5c9c331914b
-   And has a characteristic of: beb5483e-36e1-4688-b7f5-ea07361b26a8
-
-   The design of creating the BLE server is:
-   1. Create a BLE Server
-   2. Create a BLE Service
-   3. Create a BLE Characteristic on the Service
-   4. Create a BLE Descriptor on the characteristic
-   5. Start the service.
-   6. Start advertising.
-
-   A connect hander associated with the server starts a background task that performs notification
-   every couple of seconds.
+  Based on Neil Kolban example for IDF: https://github.com/nkolban/esp32-snippets/blob/master/cpp_utils/tests/BLE%20Tests/SampleNotify.cpp
+  Ported to Arduino ESP32 by Evandro Copercini
+  updated by chegewara and MoThunderz
 */
 #include <BLEDevice.h>
 #include <BLEServer.h>
 #include <BLEUtils.h>
 #include <BLE2902.h>
 
-BLEServer* pServer = NULL;
-BLECharacteristic* pCharacteristic_1 = NULL;
-BLECharacteristic* pCharacteristic_2 = NULL;
-BLEDescriptor *pDescr_1;
-BLE2902 *pBLE2902_1;
-BLE2902 *pBLE2902_2;
+// Initialize all pointers
+BLEServer* pServer = NULL;                        // Pointer to the server
+BLECharacteristic* pCharacteristic_1 = NULL;      // Pointer to Characteristic 1
+BLECharacteristic* pCharacteristic_2 = NULL;      // Pointer to Characteristic 2
+BLEDescriptor *pDescr_1;                          // Pointer to Descriptor of Characteristic 1
+BLE2902 *pBLE2902_1;                              // Pointer to BLE2902 of Characteristic 1
+BLE2902 *pBLE2902_2;                              // Pointer to BLE2902 of Characteristic 2
 
+// Some variables to keep track on device connected
 bool deviceConnected = false;
 bool oldDeviceConnected = false;
+
+// Variable that will continuously be increased and written to the client
 uint32_t value = 0;
 
 // See the following for generating UUIDs:
 // https://www.uuidgenerator.net/
-
-#define SERVICE_UUID        "4fafc201-1fb5-459e-8fcc-c5c9c331914b"
+// UUIDs used in this example:
+#define SERVICE_UUID          "4fafc201-1fb5-459e-8fcc-c5c9c331914b"
 #define CHARACTERISTIC_UUID_1 "beb5483e-36e1-4688-b7f5-ea07361b26a8"
 #define CHARACTERISTIC_UUID_2 "1c95d5e3-d8f7-413a-bf3d-7a2e5d7be87e"
 
-
+// Callback function that is called whenever a client is connected or disconnected
 class MyServerCallbacks: public BLEServerCallbacks {
     void onConnect(BLEServer* pServer) {
       deviceConnected = true;
@@ -52,8 +40,6 @@ class MyServerCallbacks: public BLEServerCallbacks {
       deviceConnected = false;
     }
 };
-
-
 
 void setup() {
   Serial.begin(115200);
@@ -72,24 +58,27 @@ void setup() {
   pCharacteristic_1 = pService->createCharacteristic(
                       CHARACTERISTIC_UUID_1,
                       BLECharacteristic::PROPERTY_NOTIFY
-                    );
+                    );                   
+
   pCharacteristic_2 = pService->createCharacteristic(
                       CHARACTERISTIC_UUID_2,
+                      BLECharacteristic::PROPERTY_READ   |
+                      BLECharacteristic::PROPERTY_WRITE  |                      
                       BLECharacteristic::PROPERTY_NOTIFY
-                    );
+                    );  
 
-  // https://www.bluetooth.com/specifications/gatt/viewer?attributeXmlFile=org.bluetooth.descriptor.gatt.client_characteristic_configuration.xml
-  // Create a BLE Descriptor
+  // Create a BLE Descriptor  
   pDescr_1 = new BLEDescriptor((uint16_t)0x2901);
   pDescr_1->setValue("A very interesting variable");
   pCharacteristic_1->addDescriptor(pDescr_1);
 
+  // Add the BLE2902 Descriptor because we are using "PROPERTY_NOTIFY"
   pBLE2902_1 = new BLE2902();
-  pBLE2902_1->setNotifications(true);  
+  pBLE2902_1->setNotifications(true);                 
   pCharacteristic_1->addDescriptor(pBLE2902_1);
 
   pBLE2902_2 = new BLE2902();
-  pBLE2902_2->setNotifications(true);  
+  pBLE2902_2->setNotifications(true);
   pCharacteristic_2->addDescriptor(pBLE2902_2);
 
   // Start the service
@@ -107,21 +96,37 @@ void setup() {
 void loop() {
     // notify changed value
     if (deviceConnected) {
-        pCharacteristic_1->setValue(value);
-        pCharacteristic_1->notify();
-        value++;
-        pCharacteristic_2->setValue("This is a string");
-        pCharacteristic_2->notify();
-        delay(1000); // bluetooth stack will go into congestion, if too many packets are sent, in 6 hours test i was able to go as low as 3ms
+      // pCharacteristic_1 is an integer that is increased with every second
+      // in the code below we send the value over to the client and increase the integer counter
+      pCharacteristic_1->setValue(value);
+      pCharacteristic_1->notify();
+      value++;
+
+      // pCharacteristic_2 is a std::string (NOT a String). In the code below we read the current value
+      // write this to the Serial interface and send a different value back to the Client
+      // Here the current value is read using getValue() 
+      std::string rxValue = pCharacteristic_2->getValue();
+      Serial.print("Characteristic 2 (getValue): ");
+      Serial.println(rxValue.c_str());
+
+      // Here the value is written to the Client using setValue();
+      String txValue = "String with random value from Server: " + String(random(1000));
+      pCharacteristic_2->setValue(txValue.c_str());
+      Serial.println("Characteristic 2 (setValue): " + txValue);
+
+      // In this example "delay" is used to delay with one second. This is of course a very basic 
+      // implementation to keep things simple. I recommend to use millis() for any production code
+      delay(1000);
     }
-    // disconnecting
+    // The code below keeps the connection status uptodate:
+    // Disconnecting
     if (!deviceConnected && oldDeviceConnected) {
         delay(500); // give the bluetooth stack the chance to get things ready
         pServer->startAdvertising(); // restart advertising
         Serial.println("start advertising");
         oldDeviceConnected = deviceConnected;
     }
-    // connecting
+    // Connecting
     if (deviceConnected && !oldDeviceConnected) {
         // do stuff here on connecting
         oldDeviceConnected = deviceConnected;
