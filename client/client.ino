@@ -10,39 +10,37 @@
 
 // The remote service we wish to connect to.
 static BLEUUID serviceUUID("4fafc201-1fb5-459e-8fcc-c5c9c331914b");
-// The characteristic of the remote service we are interested in.
-static BLEUUID    charUUID_1("beb5483e-36e1-4688-b7f5-ea07361b26a8");
-static BLEUUID    charUUID_2("1c95d5e3-d8f7-413a-bf3d-7a2e5d7be87e");
+static BLEUUID    charUUID_Status("1c95d5e3-d8f7-413a-bf3d-7a2e5d7be87e");
 
+// Some variables to keep track on device connected
 static boolean doConnect = false;
 static boolean connected = false;
 static boolean doScan = false;
-static BLEAdvertisedDevice* myDevice;
 
+// Define pointer for the BLE connection
+static BLEAdvertisedDevice* myDevice;
+BLERemoteCharacteristic* pRemoteChar_Status;
+
+// Callback function for Notify function
 static void notifyCallback(BLERemoteCharacteristic* pBLERemoteCharacteristic,
                             uint8_t* pData,
                             size_t length,
                             bool isNotify) {
-    if(pBLERemoteCharacteristic->getUUID().toString() == charUUID_1.toString()){   
-      Serial.print("UUID 1 of data length: ");
-      Serial.println(length);
-      
-      uint32_t counter = pData[0];
-      for(int i = 1; i<length; i++) {
-        counter = counter | (pData[i] << i*8);
-      }
-      // print to Serial
-      Serial.print("Characteristic 1 (Notify) from server: ");
-      Serial.println(counter); 
+    /*if(pBLERemoteCharacteristic->getUUID().toString() == charUUID_1.toString()) {
+
+    // convert received bytes to integer
+    uint32_t counter = pData[0];
+    for(int i = 1; i<length; i++) {
+      counter = counter | (pData[i] << i*8);
     }
-    else if(pBLERemoteCharacteristic->getUUID().toString() == charUUID_2.toString()){
-      Serial.println("Data: ");
-      for(int i = 0; i < length; i++)
-        Serial.print((char)pData[i]);
-      Serial.println(".");
-    }
+
+    // print to Serial
+    Serial.print("Characteristic 1 (Notify) from server: ");
+    Serial.println(counter );  
+  }*/
 }
 
+// Callback function that is called whenever a client is connected or disconnected
 class MyClientCallback : public BLEClientCallbacks {
   void onConnect(BLEClient* pclient) {
   }
@@ -53,6 +51,7 @@ class MyClientCallback : public BLEClientCallbacks {
   }
 };
 
+// Function that is run whenever the server is connected
 bool connectToServer() {
     Serial.print("Forming a connection to ");
     Serial.println(myDevice->getAddress().toString().c_str());
@@ -76,47 +75,37 @@ bool connectToServer() {
       return false;
     }
     Serial.println(" - Found our service");
+
     connected = true;
-    if (connectCharac(pRemoteService, charUUID_1) == false)
-      connected = false;
-    else if(connectCharac(pRemoteService, charUUID_2) == false)
+    pRemoteChar_Status = pRemoteService->getCharacteristic(charUUID_Status);
+    if(connectCharacteristic(pRemoteService, pRemoteChar_Status) == false)
       connected = false;
 
-    if(connected = false){
-      pClient->disconnect();
-      Serial.println("At least one characteristic UUID not found");
+    if(connected == false) {
+      pClient-> disconnect();
+      Serial.println("Characteristic UUID not found");
       return false;
     }
     return true;
 }
 
-bool connectCharac(BLERemoteService* pRemoteService, BLEUUID i_charUUID){
+// Function to chech Characteristic
+bool connectCharacteristic(BLERemoteService* pRemoteService, BLERemoteCharacteristic* I_BLERemoteChar) {
   // Obtain a reference to the characteristic in the service of the remote BLE server.
-  BLERemoteCharacteristic* pRemoteCharacteristic;
-  pRemoteCharacteristic = pRemoteService->getCharacteristic(i_charUUID);
-  if (pRemoteCharacteristic == nullptr) {
-    Serial.print("Failed to find our characteristic UUID: ");
-    Serial.println(i_charUUID.toString().c_str());
+  if (I_BLERemoteChar == nullptr) {
+    Serial.print("Failed to find one of the characteristics");
+    Serial.print(I_BLERemoteChar->getUUID().toString().c_str());
     return false;
   }
-  
-  Serial.println(" - Found our characteristic");
+  Serial.println(" - Found characteristic: " + String(I_BLERemoteChar->getUUID().toString().c_str()));
 
-  // Read the value of the characteristic.
-  //if(pRemoteCharacteristic->canRead()) {
-  //  std::string value = pRemoteCharacteristic->readValue();
-  //  Serial.print("The characteristic value was: ");
-  //  Serial.println(value.c_str());
-  //}
+  if(I_BLERemoteChar->canNotify())
+    I_BLERemoteChar->registerForNotify(notifyCallback);
 
-  if(pRemoteCharacteristic->canNotify())
-    pRemoteCharacteristic->registerForNotify(notifyCallback);
-  
   return true;
 }
-/**
- * Scan for BLE servers and find the first one that advertises the service we are looking for.
- */
+
+// Scan for BLE servers and find the first one that advertises the service we are looking for.
 class MyAdvertisedDeviceCallbacks: public BLEAdvertisedDeviceCallbacks {
  /**
    * Called for each advertising BLE server.
@@ -157,7 +146,6 @@ void setup() {
 
 // This is the Arduino main loop function.
 void loop() {
-
   // If the flag "doConnect" is true then we have scanned for and found the desired
   // BLE Server with which we wish to connect.  Now we connect to it.  Once we are 
   // connected we set the connected flag to be true.
@@ -173,14 +161,21 @@ void loop() {
   // If we are connected to a peer BLE Server, update the characteristic each time we are reached
   // with the current time since boot.
   if (connected) {
-//    String newValue = "Time since boot: " + String(millis()/1000);
-//    Serial.println("Setting new characteristic value to \"" + newValue + "\"");
+    std::string rxValue = pRemoteChar_Status->readValue();
+    Serial.print("Characteristic Status (readValue): ");
+    Serial.println(rxValue.c_str());
+    
+    String txValue = "String with random value from client: " + String(-random(1000));
+    Serial.println("Characteristic Status (writeValue): " + txValue);
     
     // Set the characteristic's value to be the array of bytes that is actually a string.
-//    pRemoteCharacteristic->writeValue(newValue.c_str(), newValue.length());
+    pRemoteChar_Status->writeValue(txValue.c_str(), txValue.length());
+    
   }else if(doScan){
     BLEDevice::getScan()->start(0);  // this is just example to start scan after disconnect, most likely there is better way to do it in arduino
   }
-  
-  delay(1000); // Delay a second between loops.
+
+  // In this example "delay" is used to delay with one second. This is of course a very basic 
+  // implementation to keep things simple. I recommend to use millis() for any production code
+  delay(1000);
 } // End of loop
