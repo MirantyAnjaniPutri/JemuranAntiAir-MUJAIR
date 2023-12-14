@@ -1,22 +1,18 @@
-#include <ThingsBoard.h>
 #include <WiFi.h>
+#include <ThingSpeak.h>
 #include <HTTPClient.h>
-#include <ArduinoJson.h> // Include the ArduinoJson library
+#include <ArduinoJson.h>
 
-#define WIFI_AP "Sujarwo"
-#define WIFI_PASSWORD "Anjani91"
-#define TOKEN "KuOo88nwpZC0nmdk4B02"
+#define WIFI_AP "Miranty"
+#define WIFI_PASSWORD "Miranty27"
 
+unsigned long myChannelNumber = 2377351;
 const char* apiKey = "ca7c56cd09d32f53c7b5840220207650";
+const char* writeKey = "TH0A2OF9MLW1321D";
 double latitude = 6.200000;
 double longitude = 106.816666;
 
-bool rainSensor;
-
-char thingsboardServer[] = "192.168.1.8";
-
 WiFiClient wifiClient;
-ThingsBoard tb(wifiClient);
 
 struct WeatherData {
   String weatherMain;
@@ -27,7 +23,6 @@ struct WeatherData {
   float humidity;
 };
 
-int status = WL_IDLE_STATUS;
 unsigned long lastSend;
 
 void setup() {
@@ -35,19 +30,15 @@ void setup() {
   delay(10);
   InitWiFi();
   lastSend = 0;
+  ThingSpeak.begin(wifiClient);
+  getAndSendWeatherData();
 }
 
 void loop() {
-  if (!tb.connected()) {
-    reconnect();
-  }
-
-  if (millis() - lastSend > 600000) { // Update and send only after 1 second
+  if (millis() - lastSend > 300000) { // Update and send only after 10 minutes
     getAndSendWeatherData();
     lastSend = millis();
   }
-
-  tb.loop();
 }
 
 void getAndSendWeatherData() {
@@ -62,7 +53,7 @@ void getAndSendWeatherData() {
     return;
   }
 
-  Serial.println("Sending data to ThingsBoard:");
+  Serial.println("Sending data to ThingSpeak:");
   Serial.print("Weather Main: ");
   Serial.println(weather.weatherMain);
   Serial.print("Temperature: ");
@@ -81,12 +72,21 @@ void getAndSendWeatherData() {
   Serial.print(weather.humidity);
   Serial.println(" %");
 
-  tb.sendTelemetryString("weather", weather.weatherMain.c_str());
-  tb.sendTelemetryString("latitude", latitude.c_str());
-  tb.sendTelemetryString("longitude", longitude.c_str());
-  tb.sendTelemetryFloat("temperature", weather.temp);
-  tb.sendTelemetryFloat("humidity", weather.humidity);
-  tb.sendTelemetryFloat("pressure", weather.pressure);
+  // Send data to ThingSpeak
+  ThingSpeak.setField(1, weather.temp);  // Field 1 for Temperature
+  ThingSpeak.setField(2, weather.humidity);  // Field 2 for Humidity
+  ThingSpeak.setField(3, weather.pressure);  // Field 3 for Pressure
+  ThingSpeak.setField(4, weather.tempMin);  // Field 4 for Temp Min
+  ThingSpeak.setField(5, weather.tempMax);  // Field 5 for Temp Max
+  ThingSpeak.setField(6, weather.weatherMain.c_str());  // Field 6 for Weather Main
+
+  int writeSuccess = ThingSpeak.writeFields(myChannelNumber, writeKey);
+
+  if (writeSuccess) {
+    Serial.println("Write successful!");
+  } else {
+    Serial.println("Failed to write to ThingSpeak.");
+  }
 }
 
 WeatherData getWeatherData() {
@@ -132,35 +132,10 @@ WeatherData getWeatherData() {
 void InitWiFi() {
   Serial.println("Connecting to AP ...");
   // attempt to connect to WiFi network
-
   WiFi.begin(WIFI_AP, WIFI_PASSWORD);
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
     Serial.print(".");
   }
   Serial.println("Connected to AP");
-}
-
-void reconnect() {
-  // Loop until we're reconnected
-  while (!tb.connected()) {
-    status = WiFi.status();
-    if (status != WL_CONNECTED) {
-      WiFi.begin(WIFI_AP, WIFI_PASSWORD);
-      while (WiFi.status() != WL_CONNECTED) {
-        delay(500);
-        Serial.print(".");
-      }
-      Serial.println("Connected to AP");
-    }
-    Serial.print("Connecting to ThingsBoard node ...");
-    if (tb.connect(thingsboardServer, TOKEN)) {
-      Serial.println("[DONE]");
-    } else {
-      Serial.print("[FAILED]");
-      Serial.println(" : retrying in 5 seconds]");
-      // Wait 5 seconds before retrying
-      delay(5000);
-    }
-  }
 }
