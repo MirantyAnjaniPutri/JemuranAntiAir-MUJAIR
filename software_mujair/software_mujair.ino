@@ -7,9 +7,14 @@
 #include <TinyGPSPlus.h>
 #include <ThingsBoard.h>
 
+#define TOKEN_TB "KuOo88nwpZC0nmdk4B02"
 const char* ssid = "v";
 const char* password = "vivita21";
 const char* apiKey = "ca7c56cd09d32f53c7b5840220207650";
+char thingsboardServer[] = "192.168.1.8";
+WiFiClient wifiClient;
+ThingsBoard tb(wifiClient);
+
 double latitude;
 double longitude;
 
@@ -28,6 +33,9 @@ bool rain_flag = false;
 
 #define motorInterfaceType 1
 AccelStepper motor(motorInterfaceType, STEP, DIR);
+
+int status = WL_IDLE_STATUS;
+unsigned long lastSend;
 
 void enableOutput() {
   digitalWrite(MOTOR_ENA, LOW); // Enable the motor output
@@ -81,9 +89,13 @@ void setup() {
   Serial.println(WiFi.localIP());
 
   //Begin serial communication Neo6mGPS
+  Serial.begin(9600);
   neogps.begin(9600, SERIAL_8N1, RXD2, TXD2);
 
   delay(2000);
+
+  InitWiFi();
+  lastSend = 0;
 }
 
 void loop() {

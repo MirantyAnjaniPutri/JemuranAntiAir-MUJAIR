@@ -3,9 +3,9 @@
 #include <HTTPClient.h>
 #include <ArduinoJson.h> // Include the ArduinoJson library
 
-#define WIFI_AP "Sujarwo"
-#define WIFI_PASSWORD "Anjani91"
-#define TOKEN "KuOo88nwpZC0nmdk4B02"
+#define WIFI_AP "Miranty"
+#define WIFI_PASSWORD "Miranty27"
+#define TOKEN "iDxBefgkQWQwyD4RSi1A"
 
 const char* apiKey = "ca7c56cd09d32f53c7b5840220207650";
 double latitude = 6.200000;
@@ -13,7 +13,7 @@ double longitude = 106.816666;
 
 bool rainSensor;
 
-char thingsboardServer[] = "192.168.1.8";
+char thingsboardServer[] = "thingsboard.cloud";
 
 WiFiClient wifiClient;
 ThingsBoard tb(wifiClient);
@@ -35,6 +35,7 @@ void setup() {
   delay(10);
   InitWiFi();
   lastSend = 0;
+  getAndSendWeatherData();
 }
 
 void loop() {
@@ -42,7 +43,7 @@ void loop() {
     reconnect();
   }
 
-  if (millis() - lastSend > 600000) { // Update and send only after 1 second
+  if (millis() - lastSend > 10000) { // Update and send only after 1 second
     getAndSendWeatherData();
     lastSend = millis();
   }
@@ -65,8 +66,13 @@ void getAndSendWeatherData() {
   Serial.println("Sending data to ThingsBoard:");
   Serial.print("Weather Main: ");
   Serial.println(weather.weatherMain);
+  
   Serial.print("Temperature: ");
+  float kelvin = weather.temp;  // Replace with your Kelvin temperature
+  float celsius = kelvin - 273.15;
+  weather.temp = celsius;
   Serial.print(weather.temp);
+
   Serial.println(" *C");
   Serial.print("Temp Min: ");
   Serial.print(weather.tempMin);
@@ -81,12 +87,33 @@ void getAndSendWeatherData() {
   Serial.print(weather.humidity);
   Serial.println(" %");
 
+  String rainSensorStatus;
+  bool statusJemuran;
+  if (rainSensor == true) {
+    rainSensorStatus = "True";
+    statusJemuran = true;
+  }
+  else {
+    rainSensorStatus = "False";
+    statusJemuran = false;
+  }
+
+  String stringStatusJemuran;
+  if (statusJemuran == true) {
+    stringStatusJemuran = "Terbuka";
+  }
+  else {
+    stringStatusJemuran = "Tertutup";
+  }
+
   tb.sendTelemetryString("weather", weather.weatherMain.c_str());
-  tb.sendTelemetryString("latitude", latitude.c_str());
-  tb.sendTelemetryString("longitude", longitude.c_str());
+  tb.sendTelemetryString("latitude", String(latitude).c_str());
+  tb.sendTelemetryString("longitude", String(longitude).c_str());
   tb.sendTelemetryFloat("temperature", weather.temp);
   tb.sendTelemetryFloat("humidity", weather.humidity);
   tb.sendTelemetryFloat("pressure", weather.pressure);
+  tb.sendTelemetryString("Rain Sensor", rainSensorStatus.c_str());
+  tb.sendTelemetryString("Kondisi Terpal", stringStatusJemuran.c_str());
 }
 
 WeatherData getWeatherData() {
