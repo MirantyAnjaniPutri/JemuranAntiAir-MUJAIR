@@ -1,30 +1,32 @@
 #include "BLECom.h"
+
+// Initialize all pointers
+BLEServer* pServer = NULL;                        // Pointer to the server
+BLECharacteristic* pCharacteristic_status = NULL;      // Pointer to Characteristic Status
+BLEDescriptor *pDescr;                             // Pointer to BLE2902 of Characteristic 
+BLE2902 *pBLE2902_status;                              // Pointer to BLE2902 of Characteristic Status
+
+bool deviceConnected = false;
+bool oldDeviceConnected = false;
+uint32_t data = 0;
+
+// See the following for generating UUIDs:
+// https://www.uuidgenerator.net/
+
 #define SERVICE_UUID        "4fafc201-1fb5-459e-8fcc-c5c9c331914b"
 #define CHARACTERISTIC_UUID_STATUS "1c95d5e3-d8f7-413a-bf3d-7a2e5d7be87e"
 
-BLECom::BLECom() {
-  // Constructor code
-  pServer = NULL;
-  pCharacteristic_status = NULL;
-  pDescr = NULL;
-  pBLE2902_status = NULL;
-
-  deviceConnected = false;
-  oldDeviceConnected = false;
-  data = 0;
-}
-
 void MyServerCallbacks::onConnect(BLEServer* pServer) {
-  deviceConnected = true;
+ deviceConnected = true;
 }
 
 void MyServerCallbacks::onDisconnect(BLEServer* pServer) {
-  deviceConnected = false;
+ deviceConnected = false;
 }
 
-void MyBLELibrary::setup() {
-   // Setup code
-   Serial.begin(115200);
+
+void setupBLE() {
+  Serial.begin(115200);
 
   // Create the BLE Device
   BLEDevice::init("ESP32");
@@ -63,9 +65,8 @@ void MyBLELibrary::setup() {
   Serial.println("Waiting a client connection to notify...");
 }
 
-void MyBLELibrary::loop() {
-   // Loop code
-   // notify changed data
+void loopBLE() {
+    // notify changed data
     if (deviceConnected) {
         // pCharacteristic_2 is a std::string (NOT a String). In the code below we read the current value
         // write this to the Serial interface and send a different value back to the Client
@@ -96,5 +97,3 @@ void MyBLELibrary::loop() {
         oldDeviceConnected = deviceConnected;
     }
 }
-
-// Add other function definitions as needed
