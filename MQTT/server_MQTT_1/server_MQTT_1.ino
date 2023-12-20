@@ -115,8 +115,8 @@ void loop() {
   boolean newData = false;
   double latitude;
   double longitude;
-  
   pinMode(MOTOR_ENA, OUTPUT);
+
   disableOutput();
   if (!client.connected()) {
     reconnect();
@@ -127,7 +127,7 @@ void loop() {
   if (now - lastMsg > 5000) {
     lastMsg = now;
 
-    while(gps.location.lat() == 0 && gps.location.lng() == 0){
+    /*while(gps.location.lat() == 0 && gps.location.lng() == 0){
       for (unsigned long start = millis(); millis() - start < 1000;)
       {
         while (neogps.available())
@@ -153,11 +153,11 @@ void loop() {
       Serial.println("Satelitte: " + String(gps.satellites.value()));
       Serial.println(gps.location.isValid());
       Serial.println(String(latitude) + " and " + String(longitude));
-    }
+    }*/
 
     // Fetch weather data
     HTTPClient http;
-    String apiUrl = "http://api.openweathermap.org/data/2.5/weather?lat=" + String(-4.06) + "&lon=" + String(106.78) + "&appid=" + "ca7c56cd09d32f53c7b5840220207650";
+    String apiUrl = "http://api.openweathermap.org/data/2.5/weather?lat=" + String("-4.06") + "&lon=" + String("106.78") + "&appid=" + "ca7c56cd09d32f53c7b5840220207650";
     http.begin(apiUrl);
 
     int httpResponseCode = http.GET();
@@ -184,7 +184,16 @@ void loop() {
         sprintf(weatherString, "Weather Main: %s, Temperature: %f, Temp Min: %f, Temp Max: %f, Pressure: %f, Humidity: %f", weather.weatherMain.c_str(), weather.temp, weather.tempMin, weather.tempMax, weather.pressure, weather.humidity);
         Serial.print("Weather Data: ");
         Serial.println(weatherString);
-        client.publish("/esp32-mqtt/weather", weatherString);
+        //client.publish("/esp32-mqtt/weather", weatherString);
+        weather.weatherMain = "rain";
+        //client.publish("/esp32-mqtt/weather", weatherString); //send data to client
+        if(weather.weatherMain != "clear sky"){
+          if(weather.weatherMain != "few clouds"){
+            client.publish("/esp32-mqtt/weather", "1");
+            motor.moveTo(800);
+            motor.runToPosition();       
+          }
+        }
       } else {
         Serial.print("JSON Parsing Error: ");
         Serial.println(error.c_str());
@@ -193,7 +202,6 @@ void loop() {
       Serial.print("HTTP error code: ");
       Serial.println(httpResponseCode);
     }
-    //client.publish("/esp32-mqtt/weather", weatherString); //send data to client
     http.end();
   }
 }
