@@ -1,11 +1,11 @@
 #include <Arduino.h>
 #include <HTTPClient.h>
-//#include <ArduinoJson.h>
+#include <ArduinoJson.h>
 #include <AccelStepper.h>
 #include <WiFi.h>
 #include <Wire.h>
 #include <TinyGPSPlus.h>
-#include <ThingsBoard.h>
+//#include <ThingsBoard.h>
 #include "BLECom.h"
 
 const char* ssid = "v";
@@ -19,9 +19,6 @@ double longitude;
 
 HardwareSerial neogps(1);
 TinyGPSPlus gps;
-
-#define RAIN_PIN 4
-bool rain_flag = false;
 
 #define DIR 12
 #define STEP 14
@@ -47,23 +44,9 @@ struct WeatherData {
   float humidity;
 };
 
-void IRAM_ATTR rain_isr() {
-  // Read the rain sensor value
-  int rain_value = digitalRead(RAIN_PIN);
-
-  // Check if rain is detected
-  if (rain_value == LOW) {
-    // Set the flag to true
-    rain_flag = true;
-  }
-}
-
 void setup() {
-  pinMode(RAIN_PIN, INPUT);
   pinMode(MOTOR_ENA, OUTPUT);
   disableOutput();
-
-  attachInterrupt(digitalPinToInterrupt(RAIN_PIN), rain_isr, FALLING);
 
   motor.setMaxSpeed(1000);
   motor.setAcceleration(500);
@@ -84,48 +67,15 @@ void setup() {
   //Begin serial communication Neo6mGPS
   neogps.begin(9600, SERIAL_8N1, RXD2, TXD2);
 
+  setupBLE();
+
   delay(2000);
 }
 
 void loop() {
   // Your code here
   boolean newData = false;
-
-  if(rain_flag == true) {
-
-    // Print a message to the serial monitor
-    Serial.println("Rain detected!");
-
-    // Move the motor to position 800
-    enableOutput();
-    motor.moveTo(800);
-    while (motor.distanceToGo() != 0) {
-      motor.run();
-    }
-
-    // Disable motor
-    disableOutput();
-    
-    // Wait for rain to stop
-    while (rain_flag == true) {
-      delay(10000);
-    }
-
-    // Enable the motor output
-    enableOutput();
-
-    // Move the motor to position 0
-    motor.moveTo(0);
-    while (motor.distanceToGo() != 0) {
-      motor.run();
-    }
-
-    // Disable the motor output
-    disableOutput();
-
-    // Reset the flag to false
-    rain_flag = false;
-  } else{
+  loopBLE();
     while(gps.location.lat() == 0 && gps.location.lng() == 0){
       for (unsigned long start = millis(); millis() - start < 1000;)
       {
@@ -205,5 +155,5 @@ void loop() {
 
     http.end();
     delay(1000);
-  }
+  
 }
