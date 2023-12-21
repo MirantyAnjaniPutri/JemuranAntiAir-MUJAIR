@@ -17,6 +17,8 @@ const char* apiKey = "ca7c56cd09d32f53c7b5840220207650";*/
 WiFiClient espClient;
 PubSubClient client(espClient);
 unsigned long lastMsg = 0;
+bool cuaca;
+char clientData[2];
 
 //GPS pin, variable etc
 #define RXD2 16
@@ -71,13 +73,52 @@ void setup_wifi() {
 }
 
 void callback(char* topic, byte* payload, unsigned int length) {
- Serial.print("Message arrived [");
- Serial.print(topic);
- Serial.print("] ");
- for (int i = 0; i < length; i++) {
-   Serial.print((char)payload[i]);
- }
- Serial.println();
+  Serial.print("Message arrived [");
+  Serial.print(topic);
+  Serial.print("] ");
+  for (int i = 0; i < length; i++) {
+    Serial.print((char)payload[i]);
+    clientData[i] = (char)payload[i];
+  }
+  Serial.println();
+  // Null-terminate the serverData array
+  clientData[length] = '\0';
+
+  // Send Rain Sensor Value
+  if(cuaca == true || strcmp(clientData, "1") == 0){
+    // Print a message to the serial monitor
+    Serial.println("Rain detected or received '1'!");
+    
+    // Move the motor to position 800
+    enableOutput();
+    motor.moveTo(800);
+    while (motor.distanceToGo() != 0) {
+      motor.run();
+    }
+
+    // Disable motor
+    disableOutput();
+    
+    // Wait for rain to stop
+    while (cuaca == true) {
+      delay(10000);
+    }
+
+    // Enable the motor output
+    enableOutput();
+
+    // Move the motor to position 0
+    motor.moveTo(0);
+    while (motor.distanceToGo() != 0) {
+      motor.run();
+    }
+
+    // Disable the motor output
+    disableOutput();
+
+    // Reset the flag to false
+    cuaca = false;
+  }
 }
 
 void reconnect() {
@@ -127,37 +168,31 @@ void loop() {
   if (now - lastMsg > 5000) {
     lastMsg = now;
 
-    /*while(gps.location.lat() == 0 && gps.location.lng() == 0){
-      for (unsigned long start = millis(); millis() - start < 1000;)
-      {
-        while (neogps.available())
-        {
-          if (gps.encode(neogps.read()))
-          {
-            newData = true;
-          }
-        }
-      }
+    if(neogps.available() == true){
+      if (gps.encode(neogps.read()))
+        newData = true;
+    }else{
+      newData = false;      
+    }
 
-      //If newData is true
-      if(newData == true)
-      {
-        newData = false;
-        latitude = gps.location.lat();
-        longitude = gps.location.lng();
-      }
-      else
-      {
-        Serial.println("No Data");
-      }
-      Serial.println("Satelitte: " + String(gps.satellites.value()));
-      Serial.println(gps.location.isValid());
-      Serial.println(String(latitude) + " and " + String(longitude));
-    }*/
+    if(newData == true)
+    {
+      newData = false;
+      latitude = gps.location.lat();
+      longitude = gps.location.lng();
+    }
+    else
+    {
+      latitude = 6.34;
+      longitude = 106.83;
+    }
 
+    Serial.println("Satelitte: " + String(gps.satellites.value()));
+    Serial.println(gps.location.isValid());
+    Serial.println(String(latitude) + " and " + String(longitude));
     // Fetch weather data
     HTTPClient http;
-    String apiUrl = "http://api.openweathermap.org/data/2.5/weather?lat=" + String("-4.06") + "&lon=" + String("106.78") + "&appid=" + "ca7c56cd09d32f53c7b5840220207650";
+    String apiUrl = "http://api.openweathermap.org/data/2.5/weather?lat=" + String(latitude) + "&lon=" + String(longitude) + "&appid=" + "ca7c56cd09d32f53c7b5840220207650";
     http.begin(apiUrl);
 
     int httpResponseCode = http.GET();
@@ -166,7 +201,7 @@ void loop() {
       String payload = http.getString();
 
       // Parse JSON
-      DynamicJsonDocument jsonDoc(2048); // Adjust the buffer size as needed
+      DynamicJsonDocument jsonDoc(4096); // Adjust the buffer size as needed
       DeserializationError error = deserializeJson(jsonDoc, payload);
 
       if (!error) {
@@ -180,19 +215,19 @@ void loop() {
         jsonDoc.shrinkToFit();
 
         // Convert the weather data to a char array
-        char weatherString[128];
+        char weatherString[256];
         sprintf(weatherString, "Weather Main: %s, Temperature: %f, Temp Min: %f, Temp Max: %f, Pressure: %f, Humidity: %f", weather.weatherMain.c_str(), weather.temp, weather.tempMin, weather.tempMax, weather.pressure, weather.humidity);
         Serial.print("Weather Data: ");
         Serial.println(weatherString);
-        //client.publish("/esp32-mqtt/weather", weatherString);
         weather.weatherMain = "rain";
-        //client.publish("/esp32-mqtt/weather", weatherString); //send data to client
-        if(weather.weatherMain != "clear sky"){
-          if(weather.weatherMain != "few clouds"){
-            client.publish("/esp32-mqtt/weather", "1");
-            motor.moveTo(800);
-            motor.runToPosition();       
+        if(weather.weatherMain != "clear"){
+          if(weather.weatherMain != "clouds"){
+            cuaca = true;
+            client.publish("/esp32-mqtt/weather", "1");       
           }
+        }else{
+          cuaca = false;
+          client.publish("/esp32-mqtt/weather", "0");
         }
       } else {
         Serial.print("JSON Parsing Error: ");
